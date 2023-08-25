@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ELI10</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<style>
+    @media (max-width: 576px) { /* targeting screens smaller than Bootstrap's sm breakpoint */
+    .mobile-font-size {
+        font-size: 1.5rem; /* adjust this value to your preference */
+    }
+}
+</style>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-CHR94Q0DK0"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-CHR94Q0DK0');
+
+
+let appConfig = {};
+
+// Fetch the config file at the start of your application
+fetch('/config.json')
+    .then(response => response.json())
+    .then(config => {
+        appConfig = config;
+        // Now you can use appConfig in your application
+        console.log(appConfig.apiEndpoint);
+        initApp();  // Suppose this initializes your app
+    })
+    .catch(error => {
+        console.error("Error fetching configuration:", error);
+        // Handle the error (maybe show an error message to the user)
+    });
+
+</script>
+
+<body>
+<div class="d-flex justify-content-center align-items-center">
+<div class="container text-center">
+        <div class="row">
+            <div class="col-12">
+             <h3 class="display-1 mobile-font-size ">Explain like I'm 10</h3>
+            </div>
+        </div>
+</div>
+</div>
+<div class="container mt-5">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card">
+                <div class="card-body">
+                    <div id="chatLog" class="mb-3"></div>
+                    <div class="input-group mb-2">
+                        <input type="text" id="userInput" class="form-control" placeholder="What concept would you like to understand?">
+                        <div class="input-group-append d-none d-md-block"> <!-- hide on mobile, show on medium and up -->
+                            <button onclick="sendMessage()" class="btn btn-primary">Send</button>
+                            <button onclick="newConversation()" class="btn btn-secondary">New Conversation</button>
+                        </div>
+                    </div>
+                    <div class="d-md-none"> <!-- show only on mobile -->
+                        <button onclick="sendMessage()" class="btn btn-primary btn-block mb-1">Send</button>
+                        <button onclick="newConversation()" class="btn btn-secondary btn-block">New Conversation</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function initApp() {}
+
+    let partialData = '';  // Used to handle potential message fragments at chunk boundaries.
+
+    async function sendMessage() {
+        const userInputElem = document.getElementById("userInput");
+        const userInput = userInputElem.value;
+        const chatLog = document.getElementById("chatLog");
+
+        // Create a new div for the user's message and add to the chat log
+        const userDiv = document.createElement('div');
+        userDiv.textContent = `User: ${userInput}`;
+        chatLog.appendChild(userDiv);
+
+        // Create a new div for the assistant's response and add to the chat log
+        const responseDiv = document.createElement('div');
+        chatLog.appendChild(responseDiv);
+
+        // Clear the input field after sending the message
+        userInputElem.value = '';
+
+        // Establish a fetch connection.
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + appConfig.apikey
+            },
+            body: JSON.stringify({
+                "model": "gpt-3.5-turbo",
+                "messages": [{"role": "user", "content": "Explain " + userInput+ "like I'm 10" }],
+                "temperature": 0.7,
+                "stream": true
+            })
+        });
+
+        // Reading chunks using the response body's reader.
+        const reader = response.body.getReader();
+
+        // Recursive function to process each text chunk.
+        reader.read().then(function processText({ done, value }) {
+    if (done) {
+        partialData = '';
+        return;
+    }
+
+    // Convert Uint8Array chunk to a string.
+    const chunkText = partialData + new TextDecoder().decode(value);
+
+    if (chunkText.includes("[DONE]")) {
+        return; // Don't try to process the "[DONE]" message.
+    }
+
+    const dataParts = chunkText.split("\n");
+
+    for (let i = 0; i < dataParts.length - 1; i++) {
+        if (dataParts[i].startsWith("data:")) {
+            const jsonStr = dataParts[i].replace("data:", "").trim();
+            try {
+                const data = JSON.parse(jsonStr);
+                const messageContent = data.choices && data.choices[0] && data.choices[0].delta && data.choices[0].delta.content;
+                if (messageContent) {
+                const formattedContent = messageContent
+                 .replace(/\n/g, "<br/>")
+                    responseDiv.innerHTML += formattedContent;
+                }
+            } catch (error) {
+                console.error("Failed to parse JSON:", error);
+            }
+        }
+    }
+
+    partialData = dataParts[dataParts.length - 1];
+
+    // Read more chunks and recursively call this function.
+    return reader.read().then(processText);
+});
+}
+
+    function newConversation() {
+        const chatLog = document.getElementById("chatLog");
+        chatLog.innerHTML = '';
+        document.getElementById("userInput").value = '';
+    }
+
+
+
+</script>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.16.0/umd/popper.min.js"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+
+</body>
+</html>
